@@ -8,6 +8,7 @@ from pymongo.errors import DuplicateKeyError
 from pymongo.mongo_client import MongoClient
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 
 
 application = Flask(__name__)
@@ -21,47 +22,73 @@ db_operations = mongo.db.testing
 jobstores = {
     'default': MongoDBJobStore(database='apscheduler', collection='jobs', client=client)
 }
+executors = {
+    'default': ThreadPoolExecutor(20),
+    'processpool': ProcessPoolExecutor(5)
+}
+job_defaults = {
+    'coalesce': False,
+    'max_instances': 3
+}
 
-scheduler = BackgroundScheduler(jobstores=jobstores)
+scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults)
 scheduler.start()
 
-def sched(phone, lead, _name, _timestamp):
-    text = f"Sent on {_timestamp}"
-    resp = waapis.send_message(phone=phone, message=text)
-    print(resp)
+# def sched(phone, lead, _timestamp, i):
+#     text = f"M{i} - Sent on {_timestamp}"
+#     print(text)
+    # resp = waapis.send_message(phone=phone, message=text)
+    # print(resp)
 
-@application.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json['messages'][0]
-    phone = data['chatId'][:-5]
-    _name = data['senderName'].strip()
-    # email = request.json['email']
+def sched(_timestamp, i):
+    text = f"M{i} - Sent on {_timestamp}"
+    print(text)
 
-    # Phone number validation
-    if len(phone) > 10:
-        phone = phone[-10:]
+# @application.route('/webhook', methods=['POST'])
+# def webhook():
+#     data = request.json['messages'][0]
+#     phone = data['chatId'][:-5]
+#     _name = data['senderName'].strip()
+#     # email = request.json['email']
+
+#     # Phone number validation
+#     if len(phone) > 10:
+#         phone = phone[-10:]
     
-    phone = "91" + phone
+#     phone = "91" + phone
 
-    lead = db_operations.find_one({'_id': int(phone)})
-    if lead is None:
-        try:
-            _timestamp = datetime.now() + timedelta(seconds=10)
-            new_lead = {'_id': int(phone), 'name': _name, "timestamp": round(_timestamp.timestamp()), 'ack': ""}
-            db_operations.insert_one(new_lead)
-            lead = db_operations.find_one({'_id': int(phone)})
-            r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp], run_date=_timestamp)
-            print(r)
-            _timestamp += timedelta(minutes=3)
-            r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp], run_date=_timestamp)
-            print(r)
-            _timestamp += timedelta(minutes=2)
-            r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp], run_date=_timestamp)
-            print(r)
-        except DuplicateKeyError:
-            pass
+#     lead = db_operations.find_one({'_id': int(phone)})
+#     _timestamp = datetime.now() + timedelta(seconds=10)
+#     if lead is None:
+#         new_lead = {'_id': int(phone), 'name': _name, "timestamp": round(_timestamp.timestamp()), 'ack': ""}
+#         db_operations.insert_one(new_lead)
+#         lead = db_operations.find_one({'_id': int(phone)})
+        
+#     r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 1], run_date=_timestamp)
+#     print(r)
+#     _timestamp += timedelta(minutes=1)
+#     r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 2], run_date=_timestamp)
+#     print(r)
+#     _timestamp += timedelta(minutes=1)
+#     r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 3], run_date=_timestamp)
+#     print(r)
+
+#     return {"message": "success"}
+@application.route("/")
+def home():
+    _timestamp = datetime.now() + timedelta(seconds=10)
+
+    r = scheduler.add_job(func=sched, trigger='date', args=[_timestamp, 1], run_date=_timestamp, misfire_grace_time=5)
+    print(r)
+    _timestamp += timedelta(minutes=1)
+    r = scheduler.add_job(func=sched, trigger='date', args=[_timestamp, 2], run_date=_timestamp, misfire_grace_time=5)
+    print(r)
+    _timestamp += timedelta(minutes=1)
+    r = scheduler.add_job(func=sched, trigger='date', args=[_timestamp, 3], run_date=_timestamp, misfire_grace_time=5)
+    print(r)
 
     return {"message": "success"}
 
+
 if __name__ == '__main__':
-    application.run(port=8000)
+    application.run(port=8000, debug=True)
