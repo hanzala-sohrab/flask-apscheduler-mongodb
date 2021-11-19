@@ -37,11 +37,10 @@ scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_de
 scheduler.start()
 
 def sched(phone, lead, _name, _timestamp, i):
-    if not lead['stop']:
-        text = f"M{i} - Sent on {_timestamp}"
-        print(text)
-        resp = waapis.send_message(phone=phone, message=text)
-        print(resp)
+    text = f"M{i} - Sent on {_timestamp}"
+    print(text)
+    resp = waapis.send_message(phone=phone, message=text)
+    print(resp)
 
 # def sched(_timestamp, i):
 #     text = f"M{i} - Sent on {_timestamp}"
@@ -64,28 +63,28 @@ def webhook():
         lead = db_operations.find_one({'_id': int(phone)})
         _timestamp = datetime.now() + timedelta(seconds=10)
         if lead is None:
-            new_lead = {'_id': int(phone), 'name': _name, "timestamp": round(_timestamp.timestamp()), 'ack': "", 'stop': False, 'jobs': []}
+            new_lead = {'_id': int(phone), 'name': _name, "timestamp": round(_timestamp.timestamp()), 'ack': "", 'jobs': []}
             db_operations.insert_one(new_lead)
             lead = db_operations.find_one({'_id': int(phone)})
-        else:
-            _update = {
-                "$set": {
-                    "stop": True
-                }
-            }
-            db_operations.update_one(lead, _update)
+
         jobs = []
+
         r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 1], run_date=_timestamp, misfire_grace_time=5)
-        print(r.id)
         jobs.append(r.id)
+        # print(r.id)
+
         _timestamp += timedelta(minutes=1)
+
         r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 2], run_date=_timestamp, misfire_grace_time=5)
-        print(r.id)
         jobs.append(r.id)
+        # print(r.id)
+
         _timestamp += timedelta(minutes=1)
+
         r = scheduler.add_job(func=sched, trigger='date', args=[phone, lead, _name, _timestamp, 3], run_date=_timestamp, misfire_grace_time=5)
-        print(r.id)
         jobs.append(r.id)
+        # print(r.id)
+
         _update = {
             "$set": {
                 "jobs": jobs
